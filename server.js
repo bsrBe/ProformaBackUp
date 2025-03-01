@@ -232,6 +232,13 @@ app.post('/backup', checkMongoConnection, async (req, res) => {
     console.log('Attempting to save backup...');
     const savedBackup = await backup.save({ w: 1, j: true }); // Ensure write is acknowledged
     console.log('Backup saved to MongoDB:', savedBackup._id);
+    // Verify the document exists in the database
+    const verifyBackup = await Backup.findById(savedBackup._id).exec();
+    if (!verifyBackup) {
+      console.error('Failed to verify saved backup in database:', savedBackup._id);
+      throw new Error('Backup save succeeded but document not found in database');
+    }
+    console.log('Verified backup in database:', verifyBackup._id);
     console.log('MongoDB connection state after save:', mongoose.connection.readyState);
 
     res.status(200).json({ success: true, message: 'Backup saved successfully', backupId: savedBackup._id, backup: savedBackup });
