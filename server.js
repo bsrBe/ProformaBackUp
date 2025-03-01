@@ -49,6 +49,94 @@
 //   console.log(`Backup server running on port ${PORT}`);
 // });
 
+// const express = require('express');
+// const mongoose = require('mongoose');
+// const dotenv = require('dotenv');
+// const cors = require('cors');
+
+// dotenv.config();
+
+// const app = express();
+// app.use(express.json({ limit: '50mb' }));
+// app.use(cors());
+
+// // Connect to MongoDB Atlas with retry logic
+// async function connectToMongoDB() {
+//   let attempts = 5;
+//   while (attempts > 0) {
+//     try {
+//       await mongoose.connect(process.env.MONGODB_URI, {
+//       });
+//       console.log('Connected to MongoDB Atlas');
+//       return;
+//     } catch (err) {
+//       console.error(`Failed to connect to MongoDB Atlas (attempt ${6 - attempts}):`, err);
+//       attempts--;
+//       if (attempts === 0) throw err;
+//       await new Promise(resolve => setTimeout(resolve, 5000)); // Wait 5 seconds before retrying
+//     }
+//   }
+// }
+
+// connectToMongoDB().catch(err => {
+//   console.error('MongoDB connection failed after retries:', err);
+//   process.exit(1);
+// });
+
+// // Define a schema for backups
+// const backupSchema = new mongoose.Schema({
+//   timestamp: { type: Date, default: Date.now },
+//   data: { type: Object, required: true },
+// });
+
+// const Backup = mongoose.model('Backup', backupSchema);
+
+// // Middleware to check MongoDB connection
+// const checkMongoConnection = (req, res, next) => {
+//   if (mongoose.connection.readyState !== 1) {
+//     console.error('MongoDB connection not ready:', mongoose.connection.readyState);
+//     return res.status(500).json({ success: false, message: 'Database connection not ready', readyState: mongoose.connection.readyState });
+//   }
+//   console.log('MongoDB connection is ready:', mongoose.connection.readyState);
+//   next();
+// };
+
+
+
+// // Health check endpoint
+// app.get('/health', checkMongoConnection, (req, res) => {
+//   res.status(200).json({ success: true, message: 'Server is healthy', mongoConnected: mongoose.connection.readyState === 1 });
+// });
+
+// // Endpoint to handle backup requests
+// app.post('/backup', checkMongoConnection,  async (req, res) => {
+//   try {
+//     console.log('Received backup data:', JSON.stringify(req.body, null, 2));
+//     const { data } = req.body;
+//     if (!data) {
+//       console.log('Backup request failed: Missing data');
+//       return res.status(400).json({ success: false, message: 'Backup data is required' });
+//     }
+
+//     // Save the backup to MongoDB Atlas
+//     const backup = new Backup({ data });
+//     console.log('Attempting to save backup...');
+//     const savedBackup = await backup.save();
+//     console.log('Backup saved to MongoDB:', savedBackup._id);
+
+//     res.status(200).json({ success: true, message: 'Backup saved successfully', backupId: savedBackup._id  ,  backup});
+//   } catch (error) {
+//     console.error('Error saving backup:', error);
+//     res.status(500).json({ success: false, message: 'Failed to save backup', error: error.message });
+//   }
+// });
+
+// // Start the server
+// const PORT = process.env.PORT || 3000;
+// app.listen(PORT, () => {
+//   console.log(`Backup server running on port ${PORT}`);
+// });
+
 const express = require('express');
 const mongoose = require('mongoose');
 const dotenv = require('dotenv');
@@ -66,6 +154,8 @@ async function connectToMongoDB() {
   while (attempts > 0) {
     try {
       await mongoose.connect(process.env.MONGODB_URI, {
+        useNewUrlParser: true,
+        useUnifiedTopology: true,
       });
       console.log('Connected to MongoDB Atlas');
       return;
@@ -73,7 +163,7 @@ async function connectToMongoDB() {
       console.error(`Failed to connect to MongoDB Atlas (attempt ${6 - attempts}):`, err);
       attempts--;
       if (attempts === 0) throw err;
-      await new Promise(resolve => setTimeout(resolve, 5000)); // Wait 5 seconds before retrying
+      await new Promise(resolve => setTimeout(resolve, 5000));
     }
   }
 }
@@ -81,6 +171,11 @@ async function connectToMongoDB() {
 connectToMongoDB().catch(err => {
   console.error('MongoDB connection failed after retries:', err);
   process.exit(1);
+});
+
+mongoose.connection.on('disconnected', () => {
+  console.log('MongoDB disconnected. Attempting to reconnect...');
+  connectToMongoDB();
 });
 
 // Define a schema for backups
@@ -101,7 +196,15 @@ const checkMongoConnection = (req, res, next) => {
   next();
 };
 
-
+// Middleware to verify the secret key
+const verifySecretKey = (req, res, next) => {
+  const secretKey = req.headers['x-secret-key'];
+  if (!secretKey || secretKey !== process.env.SECRET_KEY) {
+    console.log('Unauthorized backup request: Invalid secret key');
+    return res.status(401).json({ success: false, message: 'Unauthorized' });
+  }
+  next();
+};
 
 // Health check endpoint
 app.get('/health', checkMongoConnection, (req, res) => {
@@ -109,7 +212,7 @@ app.get('/health', checkMongoConnection, (req, res) => {
 });
 
 // Endpoint to handle backup requests
-app.post('/backup', checkMongoConnection,  async (req, res) => {
+app.post('/backup', checkMongoConnection, verifySecretKey, async (req, res) => {
   try {
     console.log('Received backup data:', JSON.stringify(req.body, null, 2));
     const { data } = req.body;
@@ -118,13 +221,20 @@ app.post('/backup', checkMongoConnection,  async (req, res) => {
       return res.status(400).json({ success: false, message: 'Backup data is required' });
     }
 
-    // Save the backup to MongoDB Atlas
+    // Double-check connection state before saving
+    console.log('MongoDB connection state before save:', mongoose.connection.readyState);
+    if (mongoose.connection.readyState !== 1) {
+      console.log('MongoDB connection lost. Attempting to reconnect...');
+      await connectToMongoDB();
+    }
+
     const backup = new Backup({ data });
     console.log('Attempting to save backup...');
-    const savedBackup = await backup.save();
+    const savedBackup = await backup.save({ w: 1, j: true }); // Ensure write is acknowledged
     console.log('Backup saved to MongoDB:', savedBackup._id);
+    console.log('MongoDB connection state after save:', mongoose.connection.readyState);
 
-    res.status(200).json({ success: true, message: 'Backup saved successfully', backupId: savedBackup._id  ,  backup});
+    res.status(200).json({ success: true, message: 'Backup saved successfully', backupId: savedBackup._id, backup: savedBackup });
   } catch (error) {
     console.error('Error saving backup:', error);
     res.status(500).json({ success: false, message: 'Failed to save backup', error: error.message });
