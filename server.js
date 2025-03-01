@@ -1,12 +1,12 @@
 const express = require('express');
 const mongoose = require('mongoose');
 const dotenv = require('dotenv');
-
+const cors = require('cors');
 dotenv.config();
 
 const app = express();
 app.use(express.json({ limit: '50mb' })); // Allow large payloads for database backups
-
+app.use(cors());
 // Connect to MongoDB Atlas
 mongoose.connect(process.env.MONGODB_URI, {
 }).then(() => {
@@ -26,6 +26,7 @@ const Backup = mongoose.model('Backup', backupSchema);
 // Endpoint to handle backup requests
 app.post('/backup', async (req, res) => {
   try {
+    console.log('Received backup data:', JSON.stringify(req.body, null, 2))
     const { data } = req.body;
     if (!data) {
       return res.status(400).json({ success: false, message: 'Backup data is required' });
