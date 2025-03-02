@@ -261,6 +261,52 @@ app.post('/backup', checkMongoConnection, async (req, res) => {
   }
 });
 
+app.get('/proformas', checkMongoConnection, verifySecretKey, async (req, res) => {
+  try {
+    const { proformaNumber } = req.query; // Optional query parameter to filter by proformaNumber
+    let query = {};
+    if (proformaNumber) {
+      query.proformaNumber = proformaNumber;
+    }
+
+    // Fetch all proformas matching the query
+    const proformas = await Proforma.find(query).exec();
+    if (!proformas || proformas.length === 0) {
+      return res.status(404).json({ success: false, message: 'No proformas found' });
+    }
+
+    // Fetch items for each proforma
+    const proformaData = [];
+    for (const proforma of proformas) {
+      const items = await Item.find({ proformaId: proforma.id }).exec();
+      const formattedItems = items.map(item => ({
+        itemName: item.itemName,
+        unit: item.unit,
+        quantity: item.quantity,
+        unitPrice: item.unitPrice,
+      }));
+
+      proformaData.push({
+        proformaNumber: proforma.proformaNumber,
+        customerName: proforma.customerName,
+        plateNumber: proforma.plateNumber,
+        vin: proforma.vin,
+        model: proforma.model,
+        referenceNumber: proforma.referenceNumber,
+        deliveryTime: proforma.deliveryTime,
+        preparedBy: proforma.preparedBy,
+        items: formattedItems,
+      });
+    }
+
+    res.status(200).json({ success: true, proformas: proformaData });
+  } catch (error) {
+    console.error('Error retrieving proformas:', error);
+    res.status(500).json({ success: false, message: 'Failed to retrieve proformas', error: error.message });
+  }
+});
+
+
 // Start the server
 const PORT = process.env.PORT || 3000;
 app.listen(PORT, () => {
