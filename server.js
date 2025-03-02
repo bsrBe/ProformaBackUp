@@ -217,7 +217,7 @@ app.get('/health', checkMongoConnection, (req, res) => {
 });
 
 // Endpoint to handle backup requests
-app.post('/backup', checkMongoConnection, verifySecretKey, async (req, res) => {
+app.post('/backup', checkMongoConnection, async (req, res) => {
   try {
     console.log('Received backup data:', JSON.stringify(req.body, null, 2));
     const { data } = req.body;

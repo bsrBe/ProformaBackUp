@@ -4,10 +4,10 @@ Content-Type: application/json
 {
   "data": {
     "proformas": [
-      { "id": 1, "proformaNumber": "PF002", "customerName": "Bsrerdtfyguhjkjmlkhjghfgdww" }
+      { "id": 1, "proformaNumber": "PF002", "customerName": "chew" }
     ],
     "items": [
-      { "id": 1, "proformaId": 2, "itemName": "back light" }
+      { "id": 1, "proformaId": 2, "itemName": " light" }
     ]
   }
 }
