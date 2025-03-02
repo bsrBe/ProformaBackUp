@@ -269,6 +269,7 @@ async function connectToMongoDB() {
   while (attempts > 0) {
     try {
       await mongoose.connect(process.env.MONGODB_URI, {
+         dbName: 'fastproformabackups',
       });
       console.log('Connected to MongoDB Atlas');
       console.log('Connected to database:', mongoose.connection.name); // Log the database name
