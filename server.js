@@ -210,15 +210,6 @@ const checkMongoConnection = (req, res, next) => {
   next();
 };
 
-// Middleware to verify the secret key
-const verifySecretKey = (req, res, next) => {
-  const secretKey = req.headers['x-secret-key'];
-  if (!secretKey || secretKey !== process.env.SECRET_KEY) {
-    console.log('Unauthorized backup request: Invalid secret key');
-    return res.status(401).json({ success: false, message: 'Unauthorized' });
-  }
-  next();
-};
 
 // Health check endpoint
 app.get('/health', checkMongoConnection, (req, res) => {
