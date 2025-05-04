@@ -224,6 +224,16 @@ app.get('/proformas', checkMongoConnection, async (req, res) => {
       error: error.message 
     });
   }
+  app.get('/debug-proformas', async (req, res) => {
+  const dbCount = await Proforma.countDocuments();
+  const apiCount = (await Proforma.find().lean()).length;
+  
+  res.json({
+    dbCount,
+    apiCount,
+    discrepancy: dbCount - apiCount,
+    sampleRecord: await Proforma.findOne().lean()
+  });
 });
 
 
