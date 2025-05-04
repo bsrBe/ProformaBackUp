@@ -145,11 +145,21 @@ app.get('/proformas', checkMongoConnection, async (req, res) => {
       referenceNumber: p.referenceNumber,
       deliveryTime: p.deliveryTime,
       preparedBy: p.preparedBy,
-      items: items.filter(i => i.proformaId === p.id).map(i => ({
-        itemName: i.itemName,
-        unit: i.unit,
-        quantity: i.quantity
-      }))
+      dateCreated: p.dateCreated,
+      lastModified: p.lastModified,
+      subTotal: p.subTotal,
+      vat: p.vat,
+      totalAmount: p.totalAmount,
+      validityInDays: p.validityInDays,
+      items: items
+        .filter(i => i.proformaId === p.id)
+        .map(i => ({
+          itemName: i.itemName,
+          unit: i.unit,
+          quantity: i.quantity,
+          unitPrice: i.unitPrice,
+          totalPrice: i.totalPrice
+        }))
     }));
 
     res.status(200).json({
@@ -163,6 +173,7 @@ app.get('/proformas', checkMongoConnection, async (req, res) => {
     res.status(500).json({ success: false, error: error.message });
   }
 });
+
 
 // Debug Endpoint
 app.get('/debug-proformas', async (req, res) => {
