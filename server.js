@@ -39,7 +39,7 @@ mongoose.connection.on('disconnected', () => {
   connectToMongoDB();
 });
 
-// Define schemas for proformas and items
+// Define schemas
 const proformaSchema = new mongoose.Schema({
   id: { type: Number, required: true, unique: true },
   proformaNumber: String,
@@ -77,53 +77,41 @@ const checkMongoConnection = (req, res, next) => {
     console.error('MongoDB connection not ready:', mongoose.connection.readyState);
     return res.status(500).json({ success: false, message: 'Database connection not ready', readyState: mongoose.connection.readyState });
   }
-  console.log('MongoDB connection is ready:', mongoose.connection.readyState);
   next();
 };
-
 
 // Health check endpoint
 app.get('/health', checkMongoConnection, (req, res) => {
   res.status(200).json({ success: true, message: 'Server is healthy', mongoConnected: mongoose.connection.readyState === 1 });
 });
 
-// Endpoint to handle backup requests
+// Backup endpoint
 app.post('/backup', checkMongoConnection, async (req, res) => {
   try {
-    console.log('Received backup data:', JSON.stringify(req.body, null, 2));
     const { data } = req.body;
     if (!data || !data.proformas || !data.items) {
-      console.log('Backup request failed: Missing data');
       return res.status(400).json({ success: false, message: 'Backup data is required' });
     }
 
-    console.log('MongoDB connection state before save:', mongoose.connection.readyState);
     if (mongoose.connection.readyState !== 1) {
-      console.log('MongoDB connection lost. Attempting to reconnect...');
       await connectToMongoDB();
     }
 
-    // Process proformas (upsert: update if exists, insert if not)
     for (const proforma of data.proformas) {
       await Proforma.updateOne(
         { id: proforma.id },
         { $set: proforma },
         { upsert: true }
       );
-      console.log(`Processed proforma with id ${proforma.id}`);
     }
 
-    // Process items (upsert: update if exists, insert if not)
     for (const item of data.items) {
       await Item.updateOne(
         { id: item.id },
         { $set: item },
         { upsert: true }
       );
-      console.log(`Processed item with id ${item.id}`);
     }
-
-    console.log('MongoDB connection state after save:', mongoose.connection.readyState);
 
     res.status(200).json({ success: true, message: 'Backup saved successfully' });
   } catch (error) {
@@ -132,69 +120,17 @@ app.post('/backup', checkMongoConnection, async (req, res) => {
   }
 });
 
-// app.get('/proformas', checkMongoConnection, async (req, res) => {
-//   try {
-//     const { proformaNumber } = req.query; // Optional query parameter to filter by proformaNumber
-//     let query = {};
-//     if (proformaNumber) {
-//       query.proformaNumber = proformaNumber;
-//     }
-
-//     // Fetch all proformas matching the query
-//     const proformas = await Proforma.find(query).exec();
-//     if (!proformas || proformas.length === 0) {
-//       return res.status(404).json({ success: false, message: 'No proformas found' });
-//     }
-
-//     // Fetch items for each proforma
-//     const proformaData = [];
-//     for (const proforma of proformas) {
-//       const items = await Item.find({ proformaId: proforma.id }).exec();
-//       const formattedItems = items.map(item => ({
-//         itemName: item.itemName,
-//         unit: item.unit,
-//         quantity: item.quantity,
-//         unitPrice: item.unitPrice,
-//       }));
-
-//       proformaData.push({
-//         proformaNumber: proforma.proformaNumber,
-//         customerName: proforma.customerName,
-//         plateNumber: proforma.plateNumber,
-//         vin: proforma.vin,
-//         model: proforma.model,
-//         referenceNumber: proforma.referenceNumber,
-//         deliveryTime: proforma.deliveryTime,
-//         preparedBy: proforma.preparedBy,
-//         items: formattedItems,
-//       });
-//     }
-
-//     res.status(200).json({ success: true, proformas: proformaData });
-//   } catch (error) {
-//     console.error('Error retrieving proformas:', error);
-//     res.status(500).json({ success: false, message: 'Failed to retrieve proformas', error: error.message });
-//   }
-// });
-
-
-
-
-
-
+// Get proformas with associated items
 app.get('/proformas', checkMongoConnection, async (req, res) => {
   try {
-    // 1. Fetch ALL proformas sorted by date (newest first)
     const proformas = await Proforma.find({})
       .sort({ dateCreated: -1, lastModified: -1 })
-      .exec();
+      .lean();
 
-    // 2. Fetch items for each (optimized with single query)
     const items = await Item.find({
       proformaId: { $in: proformas.map(p => p.id) }
-    }).exec();
+    }).lean();
 
-    // 3. Format response
     const response = proformas.map(p => ({
       proformaNumber: p.proformaNumber,
       customerName: p.customerName,
@@ -215,31 +151,33 @@ app.get('/proformas', checkMongoConnection, async (req, res) => {
       success: true,
       proformas: response,
       count: response.length,
-      latestModified: proformas[0]?.lastModified // For debugging
+      latestModified: proformas[0]?.lastModified || null
     });
   } catch (error) {
     console.error('Full proforma fetch error:', error);
-    res.status(500).json({ 
-      success: false,
-      error: error.message 
-    });
+    res.status(500).json({ success: false, error: error.message });
   }
- // Add this to your server code for debugging
+});
+
+// Debug endpoint for proforma data
 app.get('/debug-proformas', async (req, res) => {
-  const dbCount = await Proforma.countDocuments();
-  const apiCount = (await Proforma.find().lean()).length;
-  
-  res.json({
-    dbCount,
-    apiCount,
-    discrepancy: dbCount - apiCount,
-    sampleRecord: await Proforma.findOne().lean()
-  });
-});
+  try {
+    const dbCount = await Proforma.countDocuments();
+    const apiCount = (await Proforma.find().lean()).length;
+
+    res.json({
+      dbCount,
+      apiCount,
+      discrepancy: dbCount - apiCount,
+      sampleRecord: await Proforma.findOne().lean()
+    });
+  } catch (error) {
+    console.error('Error in /debug-proformas:', error);
+    res.status(500).json({ success: false, message: 'Debug endpoint failed', error: error.message });
+  }
 });
 
-
-// Start the server
+// Start server
 const PORT = process.env.PORT || 3000;
 app.listen(PORT, () => {
   console.log(`Backup server running on port ${PORT}`);
