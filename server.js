@@ -224,7 +224,8 @@ app.get('/proformas', checkMongoConnection, async (req, res) => {
       error: error.message 
     });
   }
-  app.get('/debug-proformas', async (req, res) => {
+ // Add this to your server code for debugging
+app.get('/debug-proformas', async (req, res) => {
   const dbCount = await Proforma.countDocuments();
   const apiCount = (await Proforma.find().lean()).length;
   
@@ -234,6 +235,7 @@ app.get('/proformas', checkMongoConnection, async (req, res) => {
     discrepancy: dbCount - apiCount,
     sampleRecord: await Proforma.findOne().lean()
   });
+});
 });
 
 
