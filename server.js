@@ -132,48 +132,97 @@ app.post('/backup', checkMongoConnection, async (req, res) => {
   }
 });
 
+// app.get('/proformas', checkMongoConnection, async (req, res) => {
+//   try {
+//     const { proformaNumber } = req.query; // Optional query parameter to filter by proformaNumber
+//     let query = {};
+//     if (proformaNumber) {
+//       query.proformaNumber = proformaNumber;
+//     }
+
+//     // Fetch all proformas matching the query
+//     const proformas = await Proforma.find(query).exec();
+//     if (!proformas || proformas.length === 0) {
+//       return res.status(404).json({ success: false, message: 'No proformas found' });
+//     }
+
+//     // Fetch items for each proforma
+//     const proformaData = [];
+//     for (const proforma of proformas) {
+//       const items = await Item.find({ proformaId: proforma.id }).exec();
+//       const formattedItems = items.map(item => ({
+//         itemName: item.itemName,
+//         unit: item.unit,
+//         quantity: item.quantity,
+//         unitPrice: item.unitPrice,
+//       }));
+
+//       proformaData.push({
+//         proformaNumber: proforma.proformaNumber,
+//         customerName: proforma.customerName,
+//         plateNumber: proforma.plateNumber,
+//         vin: proforma.vin,
+//         model: proforma.model,
+//         referenceNumber: proforma.referenceNumber,
+//         deliveryTime: proforma.deliveryTime,
+//         preparedBy: proforma.preparedBy,
+//         items: formattedItems,
+//       });
+//     }
+
+//     res.status(200).json({ success: true, proformas: proformaData });
+//   } catch (error) {
+//     console.error('Error retrieving proformas:', error);
+//     res.status(500).json({ success: false, message: 'Failed to retrieve proformas', error: error.message });
+//   }
+// });
+
+
+
+
+
+
 app.get('/proformas', checkMongoConnection, async (req, res) => {
   try {
-    const { proformaNumber } = req.query; // Optional query parameter to filter by proformaNumber
-    let query = {};
-    if (proformaNumber) {
-      query.proformaNumber = proformaNumber;
-    }
+    // 1. Fetch ALL proformas sorted by date (newest first)
+    const proformas = await Proforma.find({})
+      .sort({ dateCreated: -1, lastModified: -1 })
+      .exec();
 
-    // Fetch all proformas matching the query
-    const proformas = await Proforma.find(query).exec();
-    if (!proformas || proformas.length === 0) {
-      return res.status(404).json({ success: false, message: 'No proformas found' });
-    }
+    // 2. Fetch items for each (optimized with single query)
+    const items = await Item.find({
+      proformaId: { $in: proformas.map(p => p.id) }
+    }).exec();
 
-    // Fetch items for each proforma
-    const proformaData = [];
-    for (const proforma of proformas) {
-      const items = await Item.find({ proformaId: proforma.id }).exec();
-      const formattedItems = items.map(item => ({
-        itemName: item.itemName,
-        unit: item.unit,
-        quantity: item.quantity,
-        unitPrice: item.unitPrice,
-      }));
+    // 3. Format response
+    const response = proformas.map(p => ({
+      proformaNumber: p.proformaNumber,
+      customerName: p.customerName,
+      plateNumber: p.plateNumber,
+      vin: p.vin,
+      model: p.model,
+      referenceNumber: p.referenceNumber,
+      deliveryTime: p.deliveryTime,
+      preparedBy: p.preparedBy,
+      items: items.filter(i => i.proformaId === p.id).map(i => ({
+        itemName: i.itemName,
+        unit: i.unit,
+        quantity: i.quantity
+      }))
+    }));
 
-      proformaData.push({
-        proformaNumber: proforma.proformaNumber,
-        customerName: proforma.customerName,
-        plateNumber: proforma.plateNumber,
-        vin: proforma.vin,
-        model: proforma.model,
-        referenceNumber: proforma.referenceNumber,
-        deliveryTime: proforma.deliveryTime,
-        preparedBy: proforma.preparedBy,
-        items: formattedItems,
-      });
-    }
-
-    res.status(200).json({ success: true, proformas: proformaData });
+    res.status(200).json({ 
+      success: true,
+      proformas: response,
+      count: response.length,
+      latestModified: proformas[0]?.lastModified // For debugging
+    });
   } catch (error) {
-    console.error('Error retrieving proformas:', error);
-    res.status(500).json({ success: false, message: 'Failed to retrieve proformas', error: error.message });
+    console.error('Full proforma fetch error:', error);
+    res.status(500).json({ 
+      success: false,
+      error: error.message 
+    });
   }
 });
 
