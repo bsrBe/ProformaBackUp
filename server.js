@@ -67,7 +67,8 @@ const itemSchema = new mongoose.Schema({
   quantity: Number,
   unitPrice: Number,
   totalPrice: Number,
-  lastModified: String
+  lastModified: String,
+  remarks: String
 });
 
 const Proforma = mongoose.model('Proforma', proformaSchema);
@@ -158,7 +159,8 @@ app.get('/proformas', checkMongoConnection, async (req, res) => {
           unit: i.unit,
           quantity: i.quantity,
           unitPrice: i.unitPrice,
-          totalPrice: i.totalPrice
+          totalPrice: i.totalPrice,
+          remarks: i.remarks
         }))
     }));
 
@@ -193,3 +195,4 @@ const PORT = process.env.PORT || 3000;
 app.listen(PORT, () => {
   console.log(`Backup server running on port ${PORT}`);
 });
+
